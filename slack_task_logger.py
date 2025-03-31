@@ -146,13 +146,26 @@ def process_message(text):
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
+    # Optional: check signature
+    if not verifier.is_valid_request(request.get_data(), request.headers):
+        return "Invalid request", 403
+
     payload = request.json
 
-    # For Slack's initial URL verification
+    # Slack's initial verification ping
     if payload.get("type") == "url_verification":
         return payload.get("challenge"), 200
 
+    # Handle Slack messages
+    if "event" in payload:
+        event = payload["event"]
+        if event.get("type") == "message" and "bot_id" not in event:
+            text = event.get("text")
+            print(f"[INFO] Received Slack message: {text}")
+            process_message(text)
+
     return "OK", 200
+
 
 
 if __name__ == "__main__":
