@@ -159,10 +159,15 @@ def slack_events():
     # Handle Slack messages
     if "event" in payload:
         event = payload["event"]
-        if event.get("type") == "message" and "bot_id" not in event:
-            text = event.get("text")
-            print(f"[INFO] Received Slack message: {text}")
-            process_message(text)
+    if (
+        event.get("type") == "message" and
+        "bot_id" not in event and
+        event.get("channel_type") in ["channel", "im"]
+    ):
+        text = event.get("text")
+        print(f"[INFO] DM or Channel message: {text}")
+        process_message(text)
+
 
     return "OK", 200
 
