@@ -19,6 +19,23 @@ SLACK_SIGNING_SECRET=
 GOOGLE_SHARE_EMAIL=
 ```
 
+And the required `service_account.json` keys:
+
+```
+{
+  "type": "x",
+  "project_id": "x",
+  "private_key_id": "xx",
+  "private_key": "x",
+  "client_id": "x",
+  "auth_uri": "x",
+  "token_uri": "x",
+  "auth_provider_x509_cert_url": "x",
+  "client_x509_cert_url": "x",
+  "universe_domain": "googleapis.com"
+}
+```
+
 ## 2. Usage
 
 1. Create a private channel
