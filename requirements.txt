@@ -1,5 +1,9 @@
-flask
-slack_sdk
-google-api-python-client
-google-auth
-python-dotenv
+flask==3.1.0
+slack-sdk==3.35.0
+python-dotenv==1.1.0
+google-api-python-client==2.166.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+pandas==2.2.1
+gspread==6.0.2
+gspread-dataframe==3.3.1
