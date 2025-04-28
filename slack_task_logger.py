@@ -630,26 +630,26 @@ def generate_daily_analytics(spreadsheet_id, date):
         logging.error(f"Failed to generate daily analytics: {e}")
         raise
 
-# def run_daily_analytics():
-#     """Run daily analytics at 11:59 PM"""
-#     while True:
-#         now = datetime.now()
-#         # Check if it's 11:59 PM
-#         if now.hour == 23 and now.minute == 59:
-#             try:
-#                 # Get the current week's sheet ID
-#                 sheet_state = load_sheet_state()
-#                 title = get_week_sheet_title(now)
-#                 if title in sheet_state:
-#                     spreadsheet_id = sheet_state[title]
-#                     # Generate analytics for today
-#                     generate_daily_analytics(spreadsheet_id, now)
-#                     logging.info(f"Generated daily analytics for {now.date()}")
-#             except Exception as e:
-#                 logging.error(f"Failed to run daily analytics: {e}")
+def run_daily_analytics():
+    """Run daily analytics at 11:59 PM"""
+    while True:
+        now = datetime.now()
+        # Check if it's 11:59 PM
+        if now.hour == 23 and now.minute == 59:
+            try:
+                # Get the current week's sheet ID
+                sheet_state = load_sheet_state()
+                title = get_week_sheet_title(now)
+                if title in sheet_state:
+                    spreadsheet_id = sheet_state[title]
+                    # Generate analytics for today
+                    generate_daily_analytics(spreadsheet_id, now)
+                    logging.info(f"Generated daily analytics for {now.date()}")
+            except Exception as e:
+                logging.error(f"Failed to run daily analytics: {e}")
         
-#         # Sleep for 1 minute
-#         time.sleep(60)
+        # Sleep for 1 minute
+        time.sleep(60)
 
 # --- Test Functions ---
 
