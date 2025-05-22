@@ -7,9 +7,12 @@ import socket
 import slack
 import tasks as task_lib
 
+# external library imports
+from dotenv import load_dotenv
+
 
 # =========================== INPUT DATETIME RANGE ======================== #
-def input_day(self) -> tuple[datetime, datetime]:
+def input_day() -> tuple[datetime, datetime]:
     date = input("Enter the day (YYYY-MM-DD). Press Enter for today:\n")
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
@@ -21,7 +24,7 @@ def input_day(self) -> tuple[datetime, datetime]:
     )
 
 
-def input_week(self) -> tuple[datetime, datetime]:
+def input_week() -> tuple[datetime, datetime]:
     date = input(
         (
             "Enter the start day (YYYY-MM-DD) of the week. "
@@ -39,7 +42,7 @@ def input_week(self) -> tuple[datetime, datetime]:
     )
 
 
-def input_datetime_range(self) -> tuple[datetime, datetime]:
+def input_datetime_range() -> tuple[datetime, datetime]:
     start_date = input(
         "Enter the start day (YYYY-MM-DD). Press Enter for today:\n"
     )
@@ -62,59 +65,7 @@ def input_datetime_range(self) -> tuple[datetime, datetime]:
     )
 
 
-# =========================== AUDIT =============================== #
-def _audit(start_datetime: datetime, end_datetime: datetime):
-    events = query_events(start_datetime, end_datetime)
-    if not events:
-        print(f"No events found for {start_datetime}-{end_datetime}")
-        return
-    categories = self.categorize_events(events)
-    self.print_analysis(categories)
-
-
-def audit_day(self):
-    self.set_tag_option()
-    start_date, end_date = input_day()
-    self._audit(start_date, end_date)
-
-
-def audit_week(self):
-    self.set_tag_option()
-    print(self._audit_first_tag_only)
-    # audit week
-    start_datetime, end_datetime = self._date_inputter.input_week()
-    events = self.query_events(start_datetime, end_datetime)
-    if not events:
-        print(f"No events found for {start_datetime}-{end_datetime}")
-        return
-    categories = self.categorize_events(events)
-    self.print_analysis(categories)
-
-    # audit each day of the week
-    cur_datetime = start_datetime
-    while cur_datetime <= end_datetime:
-        cur_events = []
-        self._total_duration = SECS_IN_DAY
-        print(DAYS_OF_WEEK[cur_datetime.weekday()], cur_datetime.date())
-        for event in events:
-            if event["start"]["dateTime"].day == cur_datetime.day:
-                cur_events.append(event)
-        if not cur_events:
-            print(f"No events found for {cur_datetime}")
-            cur_datetime += timedelta(days=1)
-            continue
-        categories = self.categorize_events(cur_events)
-        self.print_analysis(categories)
-        cur_datetime += timedelta(days=1)
-
-
-def audit_datetime_range(self):
-    self.set_tag_option()
-    start_date, end_date = self._date_inputter.input_datetime_range()
-    self._audit(start_date, end_date)
-
-
-def audit(self):
+def main():
     print("Select from one of the following audit options:")
     options = ["day", "week", "datetime range"]
     count = 1
@@ -122,34 +73,57 @@ def audit(self):
         print(f"{count}. {option}")
         count += 1
     option = input(f"Select a number 1-{len(options)}: ")
+
+    slack_client = slack.SlackClient()
+    channel_id = "D08TTLFB7RN"
+
     if option == "1":
-        return self.audit_day()
+        start, end = input_day()
+        print(start, end)
+        analysis = task_lib.audit_slack(
+            slack_client=slack_client,
+            channel_id=channel_id,
+            start=start,
+            end=end
+        )
+        print(analysis)
+
     elif option == "2":
-        return self.audit_week()
+        # audit week
+        start, end = input_week()
+        analysis = task_lib.audit_slack(
+            slack_client=slack_client,
+            channel_id=channel_id,
+            start=start,
+            end=end,
+        )
+        print(analysis)
+
+        # audit each day of the week
+        cur = start
+        while cur <= end:
+            analysis = task_lib.audit_slack(
+                slack_client=slack_client,
+                channel_id=channel_id,
+                start=cur,
+                end=cur + timedelta(days=1)
+            )
+            print(analysis)
+            cur += timedelta(days=1)
+
     elif option == "3":
-        return self.audit_datetime_range()
+        start, end = input_datetime_range()
+        analysis = task_lib.audit_slack(start, end)
+        print(analysis)
+
     else:
         print("INVALID OPTION. TRY AGAIN.\n")
-        return self.audit()
-
-
-def main():
-    # scrape the slack channel for messages
-    channel_id = "D08SS90DC3X"
-    slack_client = slack.SlackClient()
-    slack_messages = slack_client.get_conversation_history(channel_id)
-
-    # turn the messages into tasks
-    tasks = task_lib.convert_slack_messages_to_tasks(
-        slack_messages, datetime.now()
-    )
-
-    # print the analysis
-    analysis = task_lib.TaskAnalysis(tasks)
-    print(analysis)
 
 
 if __name__ == "__main__":
+    # load the environment variable
+    load_dotenv()
+
     # ignore annoying logs from other libraries
     logging.getLogger("urllib3").setLevel(logging.ERROR)
     logging.getLogger("requests").setLevel(logging.ERROR)

@@ -1,6 +1,5 @@
 # standard library imports
 from datetime import datetime, timedelta
-from typing import List
 from dataclasses import dataclass
 
 # internal library imports
@@ -9,6 +8,7 @@ from env import slack_bot_token
 # third party imports
 from dotenv import load_dotenv
 from slack_sdk import WebClient
+import pytz
 
 
 @dataclass
@@ -62,11 +62,13 @@ class SlackClient:
         channel_id: str,
         latest: datetime | None = None,
         oldest: datetime | None = None,
-    ) -> List[SlackMessage]:
-        all_messages = []
+        preceeding_older_count: int = 0,
+    ) -> list[SlackMessage]:
+        slack_messages: list[SlackMessage] = []
         has_more = True
         next_cursor = None
 
+        # transform the arguments as needed
         if latest:
             latest_timestamp = latest.timestamp()
         else:
@@ -77,6 +79,7 @@ class SlackClient:
             oldest_timestamp = None
 
         # retrieve the messages
+        found_preceeding_older_count = 0
         while has_more:
             response = self.client.conversations_history(
                 channel=channel_id,
@@ -85,56 +88,66 @@ class SlackClient:
                 limit=200,
                 cursor=next_cursor,
                 latest=latest_timestamp,
-                oldest=oldest_timestamp,
             )
 
+            # transform the messages to the slack message object
             messages = response['messages']
-            all_messages.extend(messages)
+            for message in messages:
+                slack_message = SlackMessage(
+                    user=message["user"],
+                    type=message["type"],
+                    timestamp=datetime.fromtimestamp(float(message["ts"]), pytz.utc),
+                    text=message["text"]
+                )
+                if (
+                    oldest_timestamp and
+                    slack_message.timestamp.timestamp() < oldest_timestamp
+                ):
+                    found_preceeding_older_count += 1
+                if found_preceeding_older_count > preceeding_older_count:
+                    return slack_messages
+                slack_messages.append(slack_message)
 
             has_more = response['has_more']
             if has_more:
                 next_cursor = response['response_metadata'].get('next_cursor')
 
-        # transform them into more structured data
-        slack_messages = []
-        for message in all_messages:
-            slack_message = SlackMessage(
-                user=message["user"],
-                type=message["type"],
-                timestamp=datetime.fromtimestamp(float(message["ts"])),
-                text=message["text"]
-            )
-            slack_messages.append(slack_message)
-
         return slack_messages
 
-    # def list_conversations(self):
-    #     return self.client.conversations_list()
+    def list_conversations(self):
+        return self.client.conversations_list()
 
-    # def list_user_conversations(self):
-    #     return self.client.users_conversations(types="im")
+    def list_user_conversations(self):
+        return self.client.users_conversations(types="im")
 
-    # def get_switchlog_slackbot_dms(self):
-    #     user_conversations = self.client.users_conversations(types="im")
-    #     slackbot_conversations = []
-    #     for user_conversation in user_conversations["channels"]:
-    #         if user_conversation["user"] != 'USLACKBOT':
-    #             slackbot_conversations.append()
+    def get_switchlog_slackbot_dms(self):
+        user_conversations = self.client.users_conversations(types="im")
+        slackbot_conversations = []
+        for user_conversation in user_conversations["channels"]:
+            if user_conversation["user"] != 'USLACKBOT':
+                slackbot_conversations.append(user_conversation)
+
+        return user_conversation
 
 
 def main():
     # load the environment variables
     load_dotenv()
 
-    # scrape the slack channel
-    channel_id = "D08SS90DC3X"
     slack_client = SlackClient()
+
+    # retrieve slackbot dms
+    dms = slack_client.list_user_conversations()
+    print(dms)
+
+    # retrieve messages in a channel
+    channel_id = "D08TTLFB7RN"
     now = datetime.now()
-    one_day = timedelta(days=1)
-    one_day_ago = now - one_day
+    two_days_ago = timedelta(days=1)
+    two_days_ago = now - two_days_ago
     messages = slack_client.get_conversation_history(
         channel_id,
-        oldest=one_day_ago
+        oldest=two_days_ago
     )
     for msg in messages:
         print(msg)

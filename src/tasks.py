@@ -1,9 +1,8 @@
 # standard library imports
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, MINYEAR
 import re
-from typing import Dict, List
 
 # internal library imports
 import slack
@@ -11,13 +10,14 @@ import utils
 
 # external library imports
 from dotenv import load_dotenv
+import pytz
 
 
 @dataclass
 class Task:
     start: datetime
     end: datetime
-    tags: List[str]
+    tags: list[str]
 
     def __lt__(self, other):
         return self.start < other.start
@@ -66,7 +66,7 @@ class Task:
 @dataclass
 class TagTasks:
     tag: str
-    tasks: List[Task]
+    tasks: list[Task]
 
     def add_task(self, new_task):
         self.tasks.append(new_task)
@@ -94,18 +94,27 @@ class TagTasks:
 class TaskAnalysis:
     def __init__(
         self,
-        tasks: List[Task],
+        tasks: list[Task],
+        first_tag_only: bool = True,
     ):
-        self.tag_to_tasks: Dict[str, TagTasks] = {}
+        self.tag_to_tasks: dict[str, TagTasks] = {}
+
+        # helper function for addings tasks to the dictionary
+        def add_entry(tag, task):
+            if tag in self.tag_to_tasks:
+                self.tag_to_tasks[tag].add_task(task.copy())
+            else:
+                self.tag_to_tasks[tag] = TagTasks(
+                    tag=tag,
+                    tasks=[task.copy()]
+                )
+
         for task in tasks:
-            for tag in task.tags:
-                if tag in self.tag_to_tasks:
-                    self.tag_to_tasks[tag].add_task(task.copy())
-                else:
-                    self.tag_to_tasks[tag] = TagTasks(
-                        tag=tag,
-                        tasks=[task.copy()]
-                    )
+            if first_tag_only:
+                add_entry(task.tags[0], task.copy())
+            else:
+                for tag in task.tags:
+                    add_entry(tag, task.copy())
 
     def __max_duration_chars(self) -> int:
         durations = []
@@ -162,15 +171,15 @@ class TaskAnalysis:
 
     @property
     def analysis_duration(self) -> timedelta:
-        start = datetime.now()
-        end = datetime.now()
+        start = datetime.now(pytz.utc)
+        end = datetime(MINYEAR, 1, 1, tzinfo=pytz.utc)
         for _, tag_tasks in self.tag_to_tasks.items():
             start = min(start, tag_tasks.first_task().start)
             end = max(end, tag_tasks.last_task().end)
         return end - start
 
     @property
-    def tags(self) -> List[str]:
+    def tags(self) -> list[str]:
         tags = []
         for tag in self.tag_to_tasks.keys():
             tags.append(tag)
@@ -191,37 +200,71 @@ class TaskAnalysis:
 
 def extract_tags_from_string(s: str) -> list[str]:
     # regex the description
-    pattern = r"\[Tags:(.*?)\]"
+    pattern = r"\[(.*?)\]"
     matches = re.findall(pattern, s)
 
-    tags = []
+    tags: list[str] = []
+    if len(matches) == 0:
+        return tags
     for match in matches[0].split(","):
         tags.append(match.strip())
     return tags
 
 
 def convert_slack_messages_to_tasks(
-    slack_messages: List[slack.SlackMessage],
-    end_timestamp: datetime,
-) -> List[Task]:
+    slack_messages: list[slack.SlackMessage],
+    start: datetime,
+    end: datetime,
+) -> list[Task]:
     slack_messages.sort()
 
     tasks = []
     n_msgs = len(slack_messages)
     for i in range(n_msgs):
-        if i < n_msgs - 1:
-            end = slack_messages[i+1].timestamp
-        else:
-            end = end_timestamp
         msg = slack_messages[i]
+        if i == 0:
+            cur_start = start
+        else:
+            cur_start = msg.timestamp
+        if i < n_msgs - 1:
+            cur_end = slack_messages[i+1].timestamp
+        else:
+            cur_end = end
         tags = extract_tags_from_string(msg.text)
+        if len(tags) == 0:
+            continue
         task = Task(
-            start=msg.timestamp,
-            end=end,
+            start=cur_start,
+            end=cur_end,
             tags=tags,
         )
         tasks.append(task)
     return tasks
+
+
+def audit_slack(
+    slack_client: slack.SlackClient,
+    channel_id: str,
+    start: datetime,
+    end: datetime,
+) -> TaskAnalysis:
+
+    # scrape the slack channel for messages
+    slack_messages = slack_client.get_conversation_history(
+        channel_id,
+        latest=end,
+        oldest=start,
+        preceeding_older_count=1
+    )
+
+    # turn the messages into tasks
+    tasks = convert_slack_messages_to_tasks(
+        slack_messages=slack_messages,
+        start=start,
+        end=end,
+    )
+
+    return TaskAnalysis(tasks)
 
 
 def main():
@@ -229,16 +272,17 @@ def main():
     load_dotenv()
 
     # scrape the slack channel for messages
-    channel_id = "D08SS90DC3X"
+    channel_id = "D08TTLFB7RN"
     slack_client = slack.SlackClient()
-    slack_messages = slack_client.get_conversation_history(channel_id)
+    start = datetime(2025, 5, 20, pytz.utc)
+    end = datetime(2025, 5, 21, pytz.utc)
 
-    # turn the messages into tasks
-    tasks = convert_slack_messages_to_tasks(slack_messages, datetime.now())
-
-    # print the analysis
-    analysis = TaskAnalysis(tasks)
-    print(analysis)
+    print(audit_slack(
+        slack_client=slack_client,
+        start=start,
+        end=end,
+        channel_id=channel_id,
+    ))
 
 
 if __name__ == "__main__":
